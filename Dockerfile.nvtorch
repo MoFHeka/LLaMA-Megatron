@@ -1,0 +1,12 @@
+FROM nvcr.io/nvidia/pytorch:nvidia-pytorch-23.05-py3
+
+ENV CUDA_DEVICE_MAX_CONNECTIONS=1
+
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple &&\
+    sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
+RUN pip install tensorboard && \
+    pip install sentencepiece && \
+    pip install einops && \
+    pip install protobuf==3.20.1
+RUN pip uninstall megatron-lm && \
+    pip install git+https://github.com/MoFHeka/Megatron-LM.git
