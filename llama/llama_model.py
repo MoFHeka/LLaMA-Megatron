@@ -93,7 +93,7 @@ class TransformerBlock(ParallelTransformerLayer):
             attn_mask_type=self_attn_mask_type)
 
         # Layernorm on the attention output(ffn_norm).
-        self.input_layernorm = RMSNorm(
+        self.post_layernorm = RMSNorm(
             args.hidden_size,
             eps=args.layernorm_epsilon,
             sequence_parallel=args.sequence_parallel)
