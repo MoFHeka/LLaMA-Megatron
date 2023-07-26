@@ -23,7 +23,7 @@ pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation -
 cd ..
 
 # Installing Megatron-LM
-pip install git+https://github.com/MoFHeka/Megatron-LM.git
+pip install --no-build-isolation git+https://github.com/MoFHeka/Megatron-LM.git
 ```
 Then in this repository:
 ```bash

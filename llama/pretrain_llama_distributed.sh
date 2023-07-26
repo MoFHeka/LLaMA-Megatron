@@ -41,7 +41,6 @@ LLAMA_ARGS="
     --swiglu \
     --layernorm-epsilon 1e-6 \
     --use-rotary-position-embeddings \
-    --no-position-embedding \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     --weight-decay 0.1 \

@@ -42,15 +42,13 @@ class RMSNorm(MixedFusedRMSNorm):
 
 
 class Attention(ParallelAttention):
-    def __init__(self, init_method,
-                 output_layer_init_method, layer_number,
+    def __init__(self, config, layer_number,
                  attention_type=AttnType.self_attn,
                  attn_mask_type=AttnMaskType.causal):
-        super(Attention, self).__init__(init_method, output_layer_init_method,
-                                        layer_number, attention_type, attn_mask_type)
+        super(Attention, self).__init__(config, layer_number, attention_type, attn_mask_type)
 
 class FeedForward(ParallelMLP):
-    def __init__(self, init_method, output_layer_init_method):
+    def __init__(self, config):
         args = get_args()
 
         if args.multiple_of:
@@ -59,21 +57,20 @@ class FeedForward(ParallelMLP):
             args.ffn_hidden_size = \
                 args.multiple_of * ((tmp + args.multiple_of - 1) // args.multiple_of)
         
-        super(FeedForward, self).__init__(init_method, output_layer_init_method)
+        super(FeedForward, self).__init__(config)
 
         assert self.swiglu == True, ('Use silu according Meta LLAMA code.')
 
 
 class TransformerBlock(ParallelTransformerLayer):
-    def __init__(self, init_method, output_layer_init_method,
+    def __init__(self, config,
                  layer_number, layer_type=LayerType.encoder,
                  self_attn_mask_type=AttnMaskType.causal,
                  drop_path_rate=0.):
         args = get_args()
 
         # LLAMA is a decoder only model, but in Megatron model building we need to regard it is encoder only.
-        super(TransformerBlock, self).__init__(init_method=init_method, 
-                                               output_layer_init_method=output_layer_init_method,
+        super(TransformerBlock, self).__init__(config=config,
                                                layer_number=layer_number, layer_type=layer_type,
                                                self_attn_mask_type=self_attn_mask_type,
                                                drop_path_rate=drop_path_rate)
@@ -86,27 +83,26 @@ class TransformerBlock(ParallelTransformerLayer):
 
         # Self attention.
         self.self_attention = Attention(
-            init_method,
-            output_layer_init_method,
+            config,
             layer_number,
             attention_type=AttnType.self_attn,
             attn_mask_type=self_attn_mask_type)
 
         # Layernorm on the attention output(ffn_norm).
-        self.post_layernorm = RMSNorm(
+        self.post_attention_layernorm = RMSNorm(
             args.hidden_size,
             eps=args.layernorm_epsilon,
             sequence_parallel=args.sequence_parallel)
 
         # MLP
-        self.mlp = FeedForward(init_method, output_layer_init_method)
+        self.mlp = FeedForward(config)
 
         assert self.apply_residual_connection_post_layernorm == False
 
 
 class Transformer(ParallelTransformer):
     """Transformer class."""
-    def __init__(self, init_method, output_layer_init_method,
+    def __init__(self, config,
                  model_type=ModelType.encoder_or_decoder,
                  layer_type=LayerType.encoder,
                  self_attn_mask_type=AttnMaskType.padding,
@@ -119,8 +115,7 @@ class Transformer(ParallelTransformer):
             ('For now, we don\'t have Hopper GPU, and we need to use RMSNorm. \
              So Transformer Engine (TE) is not available.')
     
-        super(Transformer, self).__init__(init_method=init_method, 
-                                          output_layer_init_method=output_layer_init_method,
+        super(Transformer, self).__init__(config=config,
                                           model_type=model_type, layer_type=layer_type, 
                                           self_attn_mask_type=self_attn_mask_type, 
                                           post_layer_norm=post_layer_norm,
@@ -134,8 +129,7 @@ class Transformer(ParallelTransformer):
         # Transformer layers.
         def build_layer(layer_number):
             return TransformerBlock(
-                init_method,
-                output_layer_init_method,
+                config,
                 layer_number,
                 layer_type=layer_type,
                 self_attn_mask_type=self_attn_mask_type,
@@ -198,8 +192,7 @@ class Transformer(ParallelTransformer):
 
 class LlamaLanguageModel(TransformerLanguageModel):
     def __init__(self,
-                 init_method,
-                 output_layer_init_method,
+                 config,
                  encoder_attn_mask_type,
                  num_tokentypes=0,
                  add_encoder=True,
@@ -209,8 +202,7 @@ class LlamaLanguageModel(TransformerLanguageModel):
                  pre_process=True,
                  post_process=True):
         # LLAMA is a decoder only model, but in Megatron model building we need to regard it is encoder only.
-        super(LlamaLanguageModel, self).__init__(init_method=init_method, 
-                                                 output_layer_init_method=output_layer_init_method,
+        super(LlamaLanguageModel, self).__init__(config=config,
                                                  encoder_attn_mask_type=encoder_attn_mask_type, 
                                                  num_tokentypes=num_tokentypes,
                                                  add_encoder=add_encoder, add_decoder=add_decoder, 
@@ -226,35 +218,32 @@ class LlamaLanguageModel(TransformerLanguageModel):
         assert self.untie_embeddings_and_output_weights == True, ('Use a ouput linear layer for computing last logits.')
 
         self.encoder = Transformer(
-            init_method=self.init_method,
-            output_layer_init_method=output_layer_init_method,
+            config=config,
             self_attn_mask_type=self.encoder_attn_mask_type,
             post_layer_norm=True,
             pre_process=self.pre_process,
             post_process=self.post_process,
         )
 
-def get_language_model(num_tokentypes, add_pooler,
-                       encoder_attn_mask_type, init_method=None,
-                       scaled_init_method=None, add_encoder=True,
+def get_language_model(config, num_tokentypes, add_pooler,
+                       encoder_attn_mask_type,
+                       add_encoder=True,
                        add_decoder=False,
                        decoder_attn_mask_type=AttnMaskType.causal,
                        pre_process=True, post_process=True):
     """Build language model and return along with the key to save."""
     args = get_args()
+    if config.init_method is None:
+        config.init_method = init_method_normal(config.init_method_std)
 
-    if init_method is None:
-        init_method = init_method_normal(args.init_method_std)
-
-    if scaled_init_method is None:
-        scaled_init_method = scaled_init_method_normal(args.init_method_std,
-                                                       args.num_layers)
+    if config.output_layer_init_method is None:
+        config.output_layer_init_method = scaled_init_method_normal(config.init_method_std,
+                                                                    config.num_layers)
 
     # Language model.
     language_model = LlamaLanguageModel(
-        init_method,
-        scaled_init_method,
-        encoder_attn_mask_type,
+        config=config,
+        encoder_attn_mask_type=encoder_attn_mask_type,
         num_tokentypes=num_tokentypes,
         add_encoder=add_encoder,
         add_decoder=add_decoder,
@@ -304,13 +293,16 @@ def post_language_model_processing(lm_output, labels, logit_weights,
 
 class LLAMAModel(MegatronModule):
     def __init__(self,
+                 config,
                  num_tokentypes=0,
                  parallel_output=True,
                  pre_process=True,
                  post_process=True,
                  return_logits=False):
         args = get_args()
-        super(LLAMAModel, self).__init__(share_word_embeddings=not args.untie_embeddings_and_output_weights)
+        super(LLAMAModel, self).__init__(config=config, 
+                                         share_embeddings_and_output_weights= \
+                                            not args.untie_embeddings_and_output_weights)
 
         self.parallel_output = parallel_output
         self.pre_process = pre_process
@@ -320,12 +312,10 @@ class LLAMAModel(MegatronModule):
         self.return_logits = return_logits
 
         self.language_model, self._language_model_key = get_language_model(
+            config=config,
             num_tokentypes=num_tokentypes,
             add_pooler=False,
             encoder_attn_mask_type=AttnMaskType.causal,
-            init_method=init_method_normal(args.init_method_std),
-            scaled_init_method=scaled_init_method_normal(args.init_method_std,
-                                                         args.num_layers),
             pre_process=self.pre_process,
             post_process=self.post_process)
         

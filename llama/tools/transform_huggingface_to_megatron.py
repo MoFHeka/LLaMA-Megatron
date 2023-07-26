@@ -21,7 +21,7 @@ def prepare():
                 save_path_subfix = f'{tp_index:02d}'
             else:
                 save_path_subfix = f'{tp_index:02d}_{pp_index:03d}'
-            save_path = MEGATRON_SAVE_PATH + 'mp_rank_' + save_path_subfix + '/model_rng.pt'
+            save_path = MEGATRON_SAVE_PATH + 'mp_rank_' + save_path_subfix + '/model_optim_rng.pt'
             id2info[key] = {'save_path': save_path,
                             'paras': {'model': {'language_model':{'encoder':{}}
                                                 },

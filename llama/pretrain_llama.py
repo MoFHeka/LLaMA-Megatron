@@ -5,6 +5,7 @@ import os
 import torch
 from functools import partial
 from megatron import get_args
+from megatron.arguments import core_transformer_config_from_args
 from megatron import print_rank_0
 from megatron import get_timers
 from megatron import get_tokenizer
@@ -20,8 +21,12 @@ from llama_megatron_dataset import build_train_valid_test_datasets
 def model_provider(pre_process=True, post_process=True):
     """Build the model."""
 
+    args = get_args()
+    config = core_transformer_config_from_args(args)
+
     print_rank_0('building LLAMA model ...')
     model = LLAMAModel(
+        config=config,
         num_tokentypes=0,
         parallel_output=True,
         pre_process=pre_process,

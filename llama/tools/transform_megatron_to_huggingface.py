@@ -24,7 +24,7 @@ def prepare_v2():
                 save_path_subfix = f'{tp_index:02d}'
             else:
                 save_path_subfix = f'{tp_index:02d}_{pp_index:03d}'
-            save_path = MEGATRON_LOAD_PATH + 'mp_rank_' + save_path_subfix + '/model_rng.pt'
+            save_path = MEGATRON_LOAD_PATH + 'mp_rank_' + save_path_subfix + '/model_optim_rng.pt'
             meg_state_dict = torch.load(save_path, map_location="cpu")
             encoder = meg_state_dict['model']['language_model']['encoder']
             for k, v in encoder.items():
